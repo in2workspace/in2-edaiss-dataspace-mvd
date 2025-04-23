@@ -1,0 +1,54 @@
+name: CD
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+
+# MVD runs using docker-compose based setup with no dependency on cloud services.
+
+jobs:
+
+  VerifyLocalTests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: ./.github/actions/gradle-setup
+
+      # Use EDC FileSystem vault for CI run.
+      - name: 'Build launcher'
+        run: ./gradlew -DuseFsVault="true" :launcher:shadowJar
+
+      # Build Registration Service runtime JAR locally.
+      # The result is a JAR file in launcher/build/libs.
+      - name: 'Build Registration Service launcher'
+        run: ./gradlew :launcher:shadowJar
+        working-directory: ${{ runner.temp }}/RegistrationService
+
+      - name: 'Run MVD docker-compose'
+        run: docker-compose -f system-tests/docker-compose.yml up --build --detach
+        timeout-minutes: 10
+        env:
+          REGISTRATION_SERVICE_LAUNCHER_PATH: ${{ runner.temp }}/RegistrationService/launcher
+
+      - name: 'Register participant'
+        run: |
+          mvn dependency:copy -Dartifact=org.eclipse.dataspaceconnector.registrationservice:registration-service-cli:1.0.0-SNAPSHOT:jar:all -DoutputDirectory=.
+          chmod +x system-tests/resources/register-participants.sh
+          system-tests/resources/register-participants.sh
+        working-directory: .
+        env:
+          REGISTRATION_SERVICE_CLI_JAR_PATH: ./registration-service-cli-1.0.0-SNAPSHOT-all.jar
+
+      - name: 'Unit and system tests'
+        run: ./gradlew test
+        timeout-minutes: 10
+        env:
+          TEST_ENVIRONMENT: "local"
+
+      - name: 'docker-compose logs'
+        run: docker-compose -f system-tests/docker-compose.yml logs
+        if: always()
+        env:
+          REGISTRATION_SERVICE_LAUNCHER_PATH: ${{ runner.temp }}/RegistrationService/launcher
