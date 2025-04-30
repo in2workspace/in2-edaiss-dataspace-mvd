@@ -95,7 +95,8 @@ jobs:
       - name: 'Build runtime JAR'
         #run: ./gradlew launcher:shadowJar
         run: ./gradlew launchers:controlplane:shadowJar
-        working-directory: ${{ runner.temp }}/RegistrationService
+        #working-directory: ${{ runner.temp }}/RegistrationService
+        working-directory: ${{ runner.temp }}/RegistrationService/launchers/controlplane/src/main/docker # Directory of the Dockerfile
 
       # Build Docker runtime image remotely on ACR & push it to the registry.
       - name: 'Build image'
